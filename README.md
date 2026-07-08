@@ -103,3 +103,5 @@ azure-avd-enterprise-architecture/
 Maintained as a portfolio reference architecture. Resource names, tenant IDs, and identifiers throughout are illustrative — this is a design and automation reference, not a deploy-as-is template for a specific tenant.
 
 Connect: [LinkedIn](https://www.linkedin.com/in/ramnarendra-naidu-gadi-sri-venkata-b1608190)
+=======
+# azure-avd-enterprise-architecture
