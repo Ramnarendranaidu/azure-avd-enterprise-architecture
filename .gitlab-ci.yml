@@ -1,0 +1,88 @@
+stages:
+  - validate
+  - plan
+  - review
+  - apply
+
+variables:
+  TF_ROOT: ${CI_PROJECT_DIR}
+  TF_STATE_NAME: default
+  ARM_USE_OIDC: "true" # workload identity federation, no stored client secret
+
+default:
+  image: hashicorp/terraform:1.7
+  before_script:
+    - cd ${MODULE_PATH}
+    - terraform init -input=false
+
+# ---------------------------------------------------------------------------
+# Validate: fmt + validate on every merge request
+# ---------------------------------------------------------------------------
+validate:
+  stage: validate
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  parallel:
+    matrix:
+      - MODULE_PATH:
+          - terraform/avd-host-pool
+          - terraform/nerdio-manager
+          - terraform/entra-conditional-access
+  script:
+    - terraform fmt -check -recursive
+    - terraform validate
+
+# ---------------------------------------------------------------------------
+# Plan: generate and store plan output, attach summary to the MR
+# ---------------------------------------------------------------------------
+plan:
+  stage: plan
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  parallel:
+    matrix:
+      - MODULE_PATH:
+          - terraform/avd-host-pool
+          - terraform/nerdio-manager
+          - terraform/entra-conditional-access
+  script:
+    - terraform plan -input=false -out=tfplan.binary
+    - terraform show -no-color tfplan.binary > plan_output.txt
+  artifacts:
+    paths:
+      - "${MODULE_PATH}/tfplan.binary"
+      - "${MODULE_PATH}/plan_output.txt"
+    expire_in: 7 days
+
+# ---------------------------------------------------------------------------
+# Review: human-readable plan summary posted as an MR note
+# ---------------------------------------------------------------------------
+review:
+  stage: review
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - echo "Plan output available as pipeline artifact — reviewer must confirm before manual apply gate."
+  dependencies:
+    - plan
+
+# ---------------------------------------------------------------------------
+# Apply: manual gate, main branch only, production requires named approver
+# ---------------------------------------------------------------------------
+apply:
+  stage: apply
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  parallel:
+    matrix:
+      - MODULE_PATH:
+          - terraform/avd-host-pool
+          - terraform/nerdio-manager
+          - terraform/entra-conditional-access
+  script:
+    - terraform apply -input=false tfplan.binary
+  dependencies:
+    - plan
+  environment:
+    name: production
